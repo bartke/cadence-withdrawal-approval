@@ -91,7 +91,7 @@ func waitForAutomatedActivity(ctx context.Context, withdrawalID string) (string,
 		return "", errors.New("withdrawal id is empty")
 	}
 
-	resp, err := http.Get(autoApprovalSystem1HostPort + "/id=" + withdrawalID)
+	resp, err := http.Get(autoApprovalSystem1HostPort + "/?id=" + withdrawalID)
 	if err != nil {
 		return "", err
 	}
