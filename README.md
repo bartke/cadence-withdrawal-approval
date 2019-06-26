@@ -26,6 +26,13 @@ You need a cadence service running. See https://github.com/uber/cadence/blob/mas
 dummy-server
 ```
 
+Start two sample auto approval systems, both approving with 70% probability
+
+```
+auto-approver -p 8091
+auto-approver -p 8092
+```
+
 Start the workflow and activity workers
 
 ```
@@ -38,7 +45,7 @@ Start the withdrawal workflow by creating a new entry:
 withdrawal -m trigger
 ```
 
-Go to [localhost](http://localhost:8080/list) to approve the withdrawal. You
-should see the workflow complete after you approve the withdrawal request.
-You can also reject it.
+Go to [localhost](http://localhost:8080/list) to approve the withdrawals if
+one of the two auto approvals fail. You should see the workflow complete after
+you approve the withdrawal request. You can also reject it.
 

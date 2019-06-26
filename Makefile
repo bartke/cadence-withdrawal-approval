@@ -19,6 +19,9 @@ clean:
 withdrawal-server: dep $(SRC)
 	go build -i -o dummy-server server/*.go
 
+approval-system: dep $(SRC)
+	go build -i -o auto-approver server/auto-approval-system/*.go
+
 withdrawal-workflow: dep $(SRC)
 	go build -i -o withdrawal *.go
 
