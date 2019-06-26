@@ -15,7 +15,11 @@ const (
 	ApplicationName = "withdrawalGroup"
 )
 
-var withdrawalServerHostPort = "http://localhost:8099"
+var (
+	withdrawalServerHostPort    = "http://localhost:8099"
+	autoApprovalSystem1HostPort = "http://localhost:8091"
+	autoApprovalSystem2HostPort = "http://localhost:8092"
+)
 
 // This needs to be done as part of a bootstrap step when the process starts.
 // The workers are supposed to be long running.

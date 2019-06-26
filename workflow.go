@@ -35,13 +35,23 @@ func SampleWithdrawalWorkflow(ctx workflow.Context, withdrawalID string) (result
 		StartToCloseTimeout:    10 * time.Minute,
 	}
 	ctx2 := workflow.WithActivityOptions(ctx, ao)
-	// Notice that we set the timeout to be 10 minutes for this sample demo. If the expected time for the activity to
-	// complete (waiting for human to approve the request) is longer, you should set the timeout accordingly so the
-	// cadence system will wait accordingly. Otherwise, cadence system could mark the activity as failure by timeout.
+
+	// Notice that we set the timeout to be 10 minutes for this sample demo.
+	// If the expected time for the activity to complete (waiting for human to
+	// approve the request) is longer, you should set the timeout accordingly
+	// so the cadence system will wait accordingly. Otherwise, cadence system
+	// could mark the activity as failure by timeout.
+
 	var status string
-	err = workflow.ExecuteActivity(ctx2, waitForDecisionActivity, withdrawalID).Get(ctx2, &status)
-	if err != nil {
-		return "", err
+	err = workflow.ExecuteActivity(ctx2, waitForAutomatedActivity, withdrawalID).Get(ctx2, &status)
+	if err != nil || status != "APPROVED" {
+		// step 2.1, optionally taking the manual branch if automated approval
+		// fails
+		logger.Info("Workflow taking manual branch.", zap.String("WithdrawalStatus", status))
+		err = workflow.ExecuteActivity(ctx2, waitForManualActivity, withdrawalID).Get(ctx2, &status)
+		if err != nil {
+			return "", err
+		}
 	}
 
 	if status != "APPROVED" {
@@ -49,7 +59,7 @@ func SampleWithdrawalWorkflow(ctx workflow.Context, withdrawalID string) (result
 		return "", nil
 	}
 
-	// step 3, request payment to the withdrawal
+	// step 3, trigger payment to the withdrawal
 	err = workflow.ExecuteActivity(ctx2, paymentActivity, withdrawalID).Get(ctx2, nil)
 	if err != nil {
 		logger.Info("Workflow completed with payment failed.", zap.Error(err))

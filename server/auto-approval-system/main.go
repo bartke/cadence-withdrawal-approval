@@ -19,10 +19,11 @@ func main() {
 }
 
 func randomApproval(w http.ResponseWriter, r *http.Request) {
+	id := r.URL.Query().Get("id")
+	result := "APPROVED"
 	if rand.Intn(100) >= 70 {
-		fmt.Fprint(w, "APPROVED")
-
-	} else {
-		fmt.Fprint(w, "DISAPPROVED")
+		result = "DISAPPROVED"
 	}
+	log.Println(id, result)
+	fmt.Fprint(w, result)
 }

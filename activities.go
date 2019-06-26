@@ -15,7 +15,8 @@ import (
 // This is registration process where you register all your activity handlers.
 func init() {
 	activity.Register(createWithdrawalActivity)
-	activity.Register(waitForDecisionActivity)
+	activity.Register(waitForManualActivity)
+	activity.Register(waitForAutomatedActivity)
 	activity.Register(paymentActivity)
 }
 
@@ -42,12 +43,12 @@ func createWithdrawalActivity(ctx context.Context, withdrawalID string) error {
 	return errors.New(string(body))
 }
 
-// waitForDecisionActivity waits for the withdrawal decision. This activity will complete asynchronously. When this method
+// waitForManualActivity waits for the withdrawal decision. This activity will complete asynchronously. When this method
 // returns error activity.ErrResultPending, the cadence client recognize this error, and won't mark this activity
 // as failed or completed. The cadence server will wait until Client.CompleteActivity() is called or timeout happened
 // whichever happen first. In this sample case, the CompleteActivity() method is called by our dummy withdrawal server when
 // the withdrawal is approved.
-func waitForDecisionActivity(ctx context.Context, withdrawalID string) (string, error) {
+func waitForManualActivity(ctx context.Context, withdrawalID string) (string, error) {
 	if len(withdrawalID) == 0 {
 		return "", errors.New("withdrawal id is empty")
 	}
@@ -62,7 +63,7 @@ func waitForDecisionActivity(ctx context.Context, withdrawalID string) (string, 
 	registerCallbackURL := withdrawalServerHostPort + "/registerCallback?id=" + withdrawalID
 	resp, err := http.PostForm(registerCallbackURL, formData)
 	if err != nil {
-		logger.Info("waitForDecisionActivity failed to register callback.", zap.Error(err))
+		logger.Info("waitForManualActivity failed to register callback.", zap.Error(err))
 		return "", err
 	}
 	body, err := ioutil.ReadAll(resp.Body)
@@ -83,6 +84,30 @@ func waitForDecisionActivity(ctx context.Context, withdrawalID string) (string, 
 
 	logger.Warn("Register callback failed.", zap.String("WithdrawalStatus", status))
 	return "", fmt.Errorf("register callback failed status:%s", status)
+}
+
+func waitForAutomatedActivity(ctx context.Context, withdrawalID string) (string, error) {
+	if len(withdrawalID) == 0 {
+		return "", errors.New("withdrawal id is empty")
+	}
+
+	resp, err := http.Get(autoApprovalSystem1HostPort + "/id=" + withdrawalID)
+	if err != nil {
+		return "", err
+	}
+	body, err := ioutil.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		return "", err
+	}
+
+	if string(body) == "APPROVED" {
+		activity.GetLogger(ctx).Info("paymentActivity approved", zap.String("WithdrawalID", withdrawalID))
+		return string(body), nil
+	}
+
+	activity.GetLogger(ctx).Info("paymentActivity disapproved", zap.String("WithdrawalID", withdrawalID))
+	return "", errors.New(string(body))
 }
 
 func paymentActivity(ctx context.Context, withdrawalID string) error {

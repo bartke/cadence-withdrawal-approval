@@ -24,7 +24,7 @@ func TestUnitTestSuite(t *testing.T) {
 func (s *UnitTestSuite) Test_WorkflowWithMockActivities() {
 	env := s.NewTestWorkflowEnvironment()
 	env.OnActivity(createWithdrawalActivity, mock.Anything, mock.Anything).Return(nil).Once()
-	env.OnActivity(waitForDecisionActivity, mock.Anything, mock.Anything).Return("APPROVED", nil).Once()
+	env.OnActivity(waitForManualActivity, mock.Anything, mock.Anything).Return("APPROVED", nil).Once()
 	env.OnActivity(paymentActivity, mock.Anything, mock.Anything).Return(nil).Once()
 
 	env.ExecuteWorkflow(SampleWithdrawalWorkflow, "test-withdrawal-id")
