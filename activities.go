@@ -101,13 +101,33 @@ func waitForAutomatedActivity(ctx context.Context, withdrawalID string) (string,
 		return "", err
 	}
 
-	if string(body) == "APPROVED" {
-		activity.GetLogger(ctx).Info("paymentActivity approved", zap.String("WithdrawalID", withdrawalID))
-		return string(body), nil
+	if string(body) != "APPROVED" {
+		activity.GetLogger(ctx).Info("paymentActivity auto disapproved", zap.String("WithdrawalID", withdrawalID))
+		return "", errors.New(string(body))
 	}
 
-	activity.GetLogger(ctx).Info("paymentActivity disapproved", zap.String("WithdrawalID", withdrawalID))
-	return "", errors.New(string(body))
+	activity.GetLogger(ctx).Info("paymentActivity auto approved", zap.String("WithdrawalID", withdrawalID))
+
+	// approve in the system
+	approveURL := withdrawalServerHostPort + "/action?is_api_call=true&type=approve&id=" + withdrawalID
+	resp, err = http.Get(approveURL)
+	if err != nil {
+		return "", err
+	}
+	body, err = ioutil.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		return "", err
+	}
+
+	if string(body) != "SUCCEED" {
+		activity.GetLogger(ctx).Info("paymentActivity auto approval failed", zap.String("WithdrawalID", withdrawalID))
+		return "", errors.New(string(body))
+	}
+
+	// feedback
+	activity.GetLogger(ctx).Info("paymentActivity auto approval succeeded", zap.String("WithdrawalID", withdrawalID))
+	return "APPROVED", nil
 }
 
 func paymentActivity(ctx context.Context, withdrawalID string) error {
