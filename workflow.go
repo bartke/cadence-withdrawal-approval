@@ -3,6 +3,7 @@ package main
 import (
 	"time"
 
+	"go.uber.org/cadence"
 	"go.uber.org/cadence/workflow"
 	"go.uber.org/zap"
 )
@@ -36,6 +37,21 @@ func SampleWithdrawalWorkflow(ctx workflow.Context, withdrawalID string) (result
 	}
 	ctx2 := workflow.WithActivityOptions(ctx, ao)
 
+	// have one retryable context
+	ao = workflow.ActivityOptions{
+		ScheduleToStartTimeout: 10 * time.Minute,
+		StartToCloseTimeout:    10 * time.Minute,
+		RetryPolicy: &cadence.RetryPolicy{
+			InitialInterval:          time.Second,
+			BackoffCoefficient:       2.0,
+			MaximumInterval:          time.Minute,
+			ExpirationInterval:       time.Minute * 5,
+			MaximumAttempts:          5,
+			NonRetriableErrorReasons: []string{},
+		},
+	}
+	ctx3 := workflow.WithActivityOptions(ctx, ao)
+
 	// Notice that we set the timeout to be 10 minutes for this sample demo.
 	// If the expected time for the activity to complete (waiting for human to
 	// approve the request) is longer, you should set the timeout accordingly
@@ -43,7 +59,7 @@ func SampleWithdrawalWorkflow(ctx workflow.Context, withdrawalID string) (result
 	// could mark the activity as failure by timeout.
 
 	var status string
-	err = workflow.ExecuteActivity(ctx2, waitForAutomatedActivity, withdrawalID).Get(ctx2, &status)
+	err = workflow.ExecuteActivity(ctx3, waitForAutomatedActivity, withdrawalID).Get(ctx3, &status)
 	if err != nil || status != "APPROVED" {
 		// step 2.1, optionally taking the manual branch if automated approval
 		// fails
