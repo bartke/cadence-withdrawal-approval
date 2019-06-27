@@ -17,6 +17,7 @@ func init() {
 	activity.Register(createWithdrawalActivity)
 	activity.Register(waitForManualActivity)
 	activity.Register(waitForAutomatedActivity)
+	activity.Register(autoApprove)
 	activity.Register(paymentActivity)
 }
 
@@ -86,12 +87,12 @@ func waitForManualActivity(ctx context.Context, withdrawalID string) (string, er
 	return "", fmt.Errorf("register callback failed status:%s", status)
 }
 
-func waitForAutomatedActivity(ctx context.Context, withdrawalID string) (string, error) {
+func waitForAutomatedActivity(ctx context.Context, withdrawalID, port string) (string, error) {
 	if len(withdrawalID) == 0 {
 		return "", errors.New("withdrawal id is empty")
 	}
 
-	resp, err := http.Get(autoApprovalSystem1HostPort + "/?id=" + withdrawalID)
+	resp, err := http.Get(autoApprovalSystem1Host + port + "/?id=" + withdrawalID)
 	if err != nil {
 		return "", err
 	}
@@ -106,7 +107,11 @@ func waitForAutomatedActivity(ctx context.Context, withdrawalID string) (string,
 		return "", errors.New(string(body))
 	}
 
-	activity.GetLogger(ctx).Info("paymentActivity auto approved", zap.String("WithdrawalID", withdrawalID))
+	string(body), nil
+}
+
+func autoApprove(ctx context.Context, withdrawalID) (string, error) {
+	activity.GetLogger(ctx).Info("paymentActivity try to auto approved", zap.String("WithdrawalID", withdrawalID))
 
 	// approve in the system
 	approveURL := withdrawalServerHostPort + "/action?is_api_call=true&type=approve&id=" + withdrawalID

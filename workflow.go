@@ -15,6 +15,8 @@ func init() {
 
 // SampleWithdrawalWorkflow workflow decider
 func SampleWithdrawalWorkflow(ctx workflow.Context, withdrawalID string) (result string, err error) {
+	waitChannel := workflow.NewChannel(ctx)
+
 	// step 1, create new withdrawal report
 	ao := workflow.ActivityOptions{
 		ScheduleToStartTimeout: time.Minute,
@@ -47,7 +49,7 @@ func SampleWithdrawalWorkflow(ctx workflow.Context, withdrawalID string) (result
 			MaximumInterval:          time.Minute,
 			ExpirationInterval:       time.Minute * 5,
 			MaximumAttempts:          5,
-			NonRetriableErrorReasons: []string{},
+			NonRetriableErrorReasons: []string{"DISAPPROVED"},
 		},
 	}
 	ctx3 := workflow.WithActivityOptions(ctx, ao)
@@ -58,9 +60,32 @@ func SampleWithdrawalWorkflow(ctx workflow.Context, withdrawalID string) (result
 	// so the cadence system will wait accordingly. Otherwise, cadence system
 	// could mark the activity as failure by timeout.
 
-	var status string
-	err = workflow.ExecuteActivity(ctx3, waitForAutomatedActivity, withdrawalID).Get(ctx3, &status)
-	if err != nil || status != "APPROVED" {
+	workflow.Go(ctx3, func(ctx workflow.Context) {
+		var status string
+		err = workflow.ExecuteActivity(ctx, waitForAutomatedActivity, withdrawalID, ":8091").Get(ctx, &status)
+		if err != nil {
+			logger.Error("Activity failed", zap.Error(err))
+		}
+		waitChannel.Send(ctx, status)
+	})
+
+	workflow.Go(ctx3, func(ctx workflow.Context) {
+		var status string
+		err = workflow.ExecuteActivity(ctx, waitForAutomatedActivity, withdrawalID, ":8092").Get(ctx, &status)
+		if err != nil {
+			logger.Error("Activity failed", zap.Error(err))
+		}
+		waitChannel.Send(ctx, status)
+	})
+
+	// wait for both of the coroutinue to complete.
+	var status, statusA, statusB string
+	waitChannel.Receive(ctx3, &statusA)
+	waitChannel.Receive(ctx3, &statusB)
+
+	if statusA == "APPROVED" && statusB == "APPROVED" {
+		status = "APPROVED"
+	} else {
 		// step 2.1, optionally taking the manual branch if automated approval
 		// fails
 		logger.Info("Workflow taking manual branch.", zap.String("WithdrawalStatus", status))

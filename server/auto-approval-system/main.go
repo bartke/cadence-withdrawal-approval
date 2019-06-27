@@ -9,8 +9,9 @@ import (
 	"time"
 )
 
+var port string
+
 func main() {
-	var port string
 	flag.StringVar(&port, "p", "port", "port to listen on")
 	flag.Parse()
 
@@ -23,7 +24,7 @@ func main() {
 
 func hex2rand(input string) int {
 	// simple way to make this deterministic for same input
-	rand.Seed(int64(int(input[len(input)-1])))
+	rand.Seed(int64(int(port[len(port)-1])) + int64(int(input[len(input)-1])))
 	return rand.Intn(100)
 }
 
