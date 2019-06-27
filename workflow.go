@@ -13,6 +13,11 @@ func init() {
 	workflow.Register(SampleWithdrawalWorkflow)
 }
 
+type Result struct {
+	Source string
+	Status string
+}
+
 // SampleWithdrawalWorkflow workflow decider
 func SampleWithdrawalWorkflow(ctx workflow.Context, withdrawalID string) (result string, err error) {
 	waitChannel := workflow.NewChannel(ctx)
@@ -27,7 +32,7 @@ func SampleWithdrawalWorkflow(ctx workflow.Context, withdrawalID string) (result
 			BackoffCoefficient:       2.0,
 			MaximumInterval:          time.Minute,
 			ExpirationInterval:       time.Minute * 5,
-			MaximumAttempts:          5,
+			MaximumAttempts:          10,
 			NonRetriableErrorReasons: []string{},
 		},
 	}
@@ -56,7 +61,7 @@ func SampleWithdrawalWorkflow(ctx workflow.Context, withdrawalID string) (result
 			BackoffCoefficient:       2.0,
 			MaximumInterval:          time.Minute,
 			ExpirationInterval:       time.Minute * 5,
-			MaximumAttempts:          5,
+			MaximumAttempts:          10,
 			NonRetriableErrorReasons: []string{"DISAPPROVED", "disapproved"},
 		},
 	}
@@ -70,7 +75,7 @@ func SampleWithdrawalWorkflow(ctx workflow.Context, withdrawalID string) (result
 		if err != nil {
 			logger.Error("Activity failed", zap.Error(err))
 		}
-		waitChannel.Send(ctx, status)
+		waitChannel.Send(ctx, Result{"sports", status})
 	})
 
 	workflow.Go(ctx3, func(ctx workflow.Context) {
@@ -79,27 +84,52 @@ func SampleWithdrawalWorkflow(ctx workflow.Context, withdrawalID string) (result
 		if err != nil {
 			logger.Error("Activity failed", zap.Error(err))
 		}
-		waitChannel.Send(ctx, status)
+		waitChannel.Send(ctx, Result{"casino", status})
 	})
 
-	// wait for both of the coroutinue to complete.
-	var status, statusA, statusB string
-	waitChannel.Receive(ctx3, &statusA)
-	waitChannel.Receive(ctx3, &statusB)
+	// add the manual workflow
 
-	if statusA == "APPROVED" && statusB == "APPROVED" {
-		status = "APPROVED"
-		err = workflow.ExecuteActivity(ctx3, autoApprove, withdrawalID).Get(ctx2, nil)
+	workflow.Go(ctx3, func(ctx workflow.Context) {
+		var status string
+		err = workflow.ExecuteActivity(ctx, waitForManualActivity, withdrawalID).Get(ctx, &status)
 		if err != nil {
-			return "", err
+			logger.Error("Activity failed", zap.Error(err))
 		}
-	} else {
-		// step 2.1, optionally taking the manual branch if automated approval
-		// fails
-		logger.Info("Workflow taking manual branch.", zap.String("WithdrawalStatus", status))
-		err = workflow.ExecuteActivity(ctx2, waitForManualActivity, withdrawalID).Get(ctx2, &status)
-		if err != nil {
-			return "", err
+		waitChannel.Send(ctx, Result{"manual", status})
+	})
+
+	// wait for the coroutinue to check in.
+
+	// NOTE: this state should be kept in an application or behind a poller in
+	// the real world, here we keep it exemplary
+	var status string
+	approvals := map[string]string{
+		"sports": "PENDING",
+		"casino": "PENDING",
+		"manual": "PENDING",
+	}
+	for {
+		if approvals["sports"] == "APPROVED" && approvals["casino"] == "APPROVED" {
+			err = workflow.ExecuteActivity(ctx3, autoApprove, withdrawalID).Get(ctx3, nil)
+			if err != nil {
+				return "", nil
+			}
+			status = "APPROVED"
+			break
+		}
+		if approvals["manual"] != "PENDING" {
+			status = approvals["manual"]
+			break
+		}
+
+		var v interface{}
+		waitChannel.Receive(ctx3, &v)
+		switch r := v.(type) {
+		case error:
+			// ignore
+		case Result:
+			logger.Info("Result received "+r.Source, zap.String("WithdrawalStatus", status))
+			approvals[r.Source] = r.Status
 		}
 	}
 
