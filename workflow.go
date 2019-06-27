@@ -28,7 +28,7 @@ func SampleWithdrawalWorkflow(ctx workflow.Context, withdrawalID string) (result
 			MaximumInterval:          time.Minute,
 			ExpirationInterval:       time.Minute * 5,
 			MaximumAttempts:          5,
-			NonRetriableErrorReasons: []string{"DISAPPROVED"},
+			NonRetriableErrorReasons: []string{},
 		},
 	}
 	ctx1 := workflow.WithActivityOptions(ctx, ao)
@@ -47,7 +47,7 @@ func SampleWithdrawalWorkflow(ctx workflow.Context, withdrawalID string) (result
 	}
 	ctx2 := workflow.WithActivityOptions(ctx, ao)
 
-	// have one retryable context
+	// step 2.1 have one retryable context for the auto approvers
 	ao = workflow.ActivityOptions{
 		ScheduleToStartTimeout: 10 * time.Minute,
 		StartToCloseTimeout:    10 * time.Minute,
@@ -62,11 +62,7 @@ func SampleWithdrawalWorkflow(ctx workflow.Context, withdrawalID string) (result
 	}
 	ctx3 := workflow.WithActivityOptions(ctx, ao)
 
-	// Notice that we set the timeout to be 10 minutes for this sample demo.
-	// If the expected time for the activity to complete (waiting for human to
-	// approve the request) is longer, you should set the timeout accordingly
-	// so the cadence system will wait accordingly. Otherwise, cadence system
-	// could mark the activity as failure by timeout.
+	// we're trying to reach two auto approvals in parallel
 
 	workflow.Go(ctx3, func(ctx workflow.Context) {
 		var status string
