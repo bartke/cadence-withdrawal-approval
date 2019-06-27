@@ -31,7 +31,7 @@ func hex2rand(input string) int {
 func randomApproval(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Query().Get("id")
 	result := "APPROVED"
-	if id != "" && hex2rand(id) >= 70 {
+	if id != "" && hex2rand(id) >= 80 {
 		result = "DISAPPROVED"
 	}
 	log.Println(id, result)

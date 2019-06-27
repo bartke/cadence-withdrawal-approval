@@ -22,6 +22,14 @@ func SampleWithdrawalWorkflow(ctx workflow.Context, withdrawalID string) (result
 		ScheduleToStartTimeout: time.Minute,
 		StartToCloseTimeout:    time.Minute,
 		HeartbeatTimeout:       time.Second * 20,
+		RetryPolicy: &cadence.RetryPolicy{
+			InitialInterval:          time.Second,
+			BackoffCoefficient:       2.0,
+			MaximumInterval:          time.Minute,
+			ExpirationInterval:       time.Minute * 5,
+			MaximumAttempts:          5,
+			NonRetriableErrorReasons: []string{"DISAPPROVED"},
+		},
 	}
 	ctx1 := workflow.WithActivityOptions(ctx, ao)
 	logger := workflow.GetLogger(ctx)
@@ -49,7 +57,7 @@ func SampleWithdrawalWorkflow(ctx workflow.Context, withdrawalID string) (result
 			MaximumInterval:          time.Minute,
 			ExpirationInterval:       time.Minute * 5,
 			MaximumAttempts:          5,
-			NonRetriableErrorReasons: []string{"DISAPPROVED"},
+			NonRetriableErrorReasons: []string{"DISAPPROVED", "disapproved"},
 		},
 	}
 	ctx3 := workflow.WithActivityOptions(ctx, ao)
@@ -85,6 +93,10 @@ func SampleWithdrawalWorkflow(ctx workflow.Context, withdrawalID string) (result
 
 	if statusA == "APPROVED" && statusB == "APPROVED" {
 		status = "APPROVED"
+		err = workflow.ExecuteActivity(ctx3, autoApprove, withdrawalID).Get(ctx2, nil)
+		if err != nil {
+			return "", err
+		}
 	} else {
 		// step 2.1, optionally taking the manual branch if automated approval
 		// fails

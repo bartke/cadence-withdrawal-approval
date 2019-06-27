@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 
+	"go.uber.org/cadence"
 	"go.uber.org/cadence/activity"
 	"go.uber.org/zap"
 )
@@ -104,22 +105,23 @@ func waitForAutomatedActivity(ctx context.Context, withdrawalID, port string) (s
 
 	if string(body) != "APPROVED" {
 		activity.GetLogger(ctx).Info("paymentActivity auto disapproved", zap.String("WithdrawalID", withdrawalID))
-		return "", errors.New(string(body))
+		// non retryable path
+		return "", cadence.NewCustomError("DISAPPROVED")
 	}
 
-	string(body), nil
+	return string(body), nil
 }
 
-func autoApprove(ctx context.Context, withdrawalID) (string, error) {
+func autoApprove(ctx context.Context, withdrawalID string) (string, error) {
 	activity.GetLogger(ctx).Info("paymentActivity try to auto approved", zap.String("WithdrawalID", withdrawalID))
 
 	// approve in the system
 	approveURL := withdrawalServerHostPort + "/action?is_api_call=true&type=approve&id=" + withdrawalID
-	resp, err = http.Get(approveURL)
+	resp, err := http.Get(approveURL)
 	if err != nil {
 		return "", err
 	}
-	body, err = ioutil.ReadAll(resp.Body)
+	body, err := ioutil.ReadAll(resp.Body)
 	resp.Body.Close()
 	if err != nil {
 		return "", err
