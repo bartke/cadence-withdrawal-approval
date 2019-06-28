@@ -10,7 +10,7 @@ var DB = make(map[string]*withdrawal)
 func New(id string) *withdrawal {
 	return &withdrawal{
 		id: id,
-		domainState: map[domain]state{
+		domainState: map[domain]State{
 			Sports: Pending,
 			Casino: Pending,
 			Manual: Pending,
@@ -50,10 +50,10 @@ func (w *withdrawal) Payout() {
 	w.state = Completed
 }
 
-func (w *withdrawal) DomainState(key domain) state {
+func (w *withdrawal) DomainState(key domain) State {
 	return w.domainState[key]
 }
 
-func (w *withdrawal) State() state {
+func (w *withdrawal) State() State {
 	return w.state
 }

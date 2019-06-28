@@ -4,12 +4,12 @@ import "strings"
 
 type withdrawal struct {
 	id          string
-	domainState map[domain]state
-	state       state
+	domainState map[domain]State
+	state       State
 }
 
 type domain string
-type state string
+type State string
 type action string
 
 const (
@@ -23,13 +23,13 @@ const (
 	Payout        action = "PAYOUT"
 	UnknownAction action = "-"
 
-	Pending   state = "PENDING"
-	Approved  state = "APPROVED"
-	Rejected  state = "REJECTED"
-	Completed state = "COMPLETED"
+	Pending   State = "PENDING"
+	Approved  State = "APPROVED"
+	Rejected  State = "REJECTED"
+	Completed State = "COMPLETED"
 )
 
-func (s state) String() string {
+func (s State) String() string {
 	return string(s)
 }
 

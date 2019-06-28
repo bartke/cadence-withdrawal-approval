@@ -58,9 +58,19 @@ func listHandler(w http.ResponseWriter, r *http.Request) {
 				"<button style=\"background-color:#f44336;\">REJECT</button></a>", id, id)
 		}
 		fmt.Fprintf(w, "<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>",
-			id, wd.DomainState(withdrawal.Sports), wd.DomainState(withdrawal.Casino), wd.DomainState(withdrawal.Manual), wd.State(), actionLink)
+			id, c(wd.DomainState(withdrawal.Sports)), c(wd.DomainState(withdrawal.Casino)), c(wd.DomainState(withdrawal.Manual)), wd.State(), actionLink)
 	}
 	fmt.Fprint(w, "</table>")
+}
+
+func c(s withdrawal.State) string {
+	if s == withdrawal.Approved {
+		return fmt.Sprintf("<span style=\"color:#4CAF50;\">%s</span>", s)
+	}
+	if s == withdrawal.Rejected {
+		return fmt.Sprintf("<span style=\"color:#f44336;\">%s</span>", s)
+	}
+	return s.String()
 }
 
 func actionHandler(w http.ResponseWriter, r *http.Request) {
