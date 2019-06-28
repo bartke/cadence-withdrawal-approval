@@ -1,4 +1,4 @@
-## Cadence Withdrawal Approval
+## Cadence Withdrawal Approval POC
 
 This sample workflow process a withdrawal request workflow with an
 asynchronous activity. Simple evaluation based on

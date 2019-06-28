@@ -62,7 +62,7 @@ func SampleWithdrawalWorkflow(ctx workflow.Context, withdrawalID string) (result
 			MaximumInterval:          time.Minute,
 			ExpirationInterval:       time.Minute * 5,
 			MaximumAttempts:          10,
-			NonRetriableErrorReasons: []string{"DISAPPROVED", "disapproved"},
+			NonRetriableErrorReasons: []string{"DISAPPROVED", "disapproved", "REJECT", "rejected"},
 		},
 	}
 	ctx3 := workflow.WithActivityOptions(ctx, ao)
@@ -71,7 +71,7 @@ func SampleWithdrawalWorkflow(ctx workflow.Context, withdrawalID string) (result
 
 	workflow.Go(ctx3, func(ctx workflow.Context) {
 		var status string
-		err = workflow.ExecuteActivity(ctx, waitForAutomatedActivity, withdrawalID, ":8091").Get(ctx, &status)
+		err = workflow.ExecuteActivity(ctx, waitForAutomatedActivity, withdrawalID, "sports").Get(ctx, &status)
 		if err != nil {
 			logger.Error("Activity failed", zap.Error(err))
 		}
@@ -80,7 +80,7 @@ func SampleWithdrawalWorkflow(ctx workflow.Context, withdrawalID string) (result
 
 	workflow.Go(ctx3, func(ctx workflow.Context) {
 		var status string
-		err = workflow.ExecuteActivity(ctx, waitForAutomatedActivity, withdrawalID, ":8092").Get(ctx, &status)
+		err = workflow.ExecuteActivity(ctx, waitForAutomatedActivity, withdrawalID, "casino").Get(ctx, &status)
 		if err != nil {
 			logger.Error("Activity failed", zap.Error(err))
 		}
@@ -100,25 +100,14 @@ func SampleWithdrawalWorkflow(ctx workflow.Context, withdrawalID string) (result
 
 	// wait for the coroutinue to check in.
 
-	// NOTE: this state should be kept in an application or behind a poller in
-	// the real world, here we keep it exemplary
 	var status string
-	approvals := map[string]string{
-		"sports": "PENDING",
-		"casino": "PENDING",
-		"manual": "PENDING",
-	}
 	for {
-		if approvals["sports"] == "APPROVED" && approvals["casino"] == "APPROVED" {
-			err = workflow.ExecuteActivity(ctx3, autoApprove, withdrawalID).Get(ctx3, nil)
-			if err != nil {
-				return "", nil
-			}
-			status = "APPROVED"
-			break
+		err = workflow.ExecuteActivity(ctx3, getStatus, withdrawalID).Get(ctx3, &status)
+		if err != nil {
+			return "", nil
 		}
-		if approvals["manual"] != "PENDING" {
-			status = approvals["manual"]
+
+		if status != "PENDING" {
 			break
 		}
 
@@ -129,7 +118,10 @@ func SampleWithdrawalWorkflow(ctx workflow.Context, withdrawalID string) (result
 			// ignore
 		case Result:
 			logger.Info("Result received "+r.Source, zap.String("WithdrawalStatus", status))
-			approvals[r.Source] = r.Status
+			err = workflow.ExecuteActivity(ctx3, autoAction, withdrawalID, r.Source, r.Status).Get(ctx3, nil)
+			if err != nil {
+				return "", nil
+			}
 		}
 	}
 

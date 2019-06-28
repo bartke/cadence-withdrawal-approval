@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"go.uber.org/cadence"
 	"go.uber.org/cadence/activity"
@@ -18,8 +19,9 @@ func init() {
 	activity.Register(createWithdrawalActivity)
 	activity.Register(waitForManualActivity)
 	activity.Register(waitForAutomatedActivity)
-	activity.Register(autoApprove)
+	activity.Register(autoAction)
 	activity.Register(paymentActivity)
+	activity.Register(getStatus)
 }
 
 func createWithdrawalActivity(ctx context.Context, withdrawalID string) error {
@@ -88,12 +90,19 @@ func waitForManualActivity(ctx context.Context, withdrawalID string) (string, er
 	return "", fmt.Errorf("register callback failed status:%s", status)
 }
 
-func waitForAutomatedActivity(ctx context.Context, withdrawalID, port string) (string, error) {
+func address(domain string) string {
+	if domain == "sports" {
+		return autoApprovalSystemSports
+	}
+	return autoApprovalSystemCasino
+}
+
+func waitForAutomatedActivity(ctx context.Context, withdrawalID, domain string) (string, error) {
 	if len(withdrawalID) == 0 {
 		return "", errors.New("withdrawal id is empty")
 	}
 
-	resp, err := http.Get(autoApprovalSystem1Host + port + "/?id=" + withdrawalID)
+	resp, err := http.Get(address(domain) + "/?id=" + withdrawalID)
 	if err != nil {
 		return "", err
 	}
@@ -103,21 +112,46 @@ func waitForAutomatedActivity(ctx context.Context, withdrawalID, port string) (s
 		return "", err
 	}
 
-	if string(body) != "APPROVED" {
-		activity.GetLogger(ctx).Info("paymentActivity auto disapproved", zap.String("WithdrawalID", withdrawalID))
+	if string(body) != "APPROVE" && string(body) != "REJECT" {
+		activity.GetLogger(ctx).Info("paymentActivity auto action:"+string(body), zap.String("WithdrawalID", withdrawalID))
 		// non retryable path
-		return "", cadence.NewCustomError("DISAPPROVED")
+		return "", cadence.NewCustomError(string(body))
 	}
 
 	return string(body), nil
 }
 
-func autoApprove(ctx context.Context, withdrawalID string) (string, error) {
+func autoAction(ctx context.Context, withdrawalID, domain, action string) error {
 	activity.GetLogger(ctx).Info("paymentActivity try to auto approved", zap.String("WithdrawalID", withdrawalID))
 
 	// approve in the system
-	approveURL := withdrawalServerHostPort + "/action?is_api_call=true&type=approve&id=" + withdrawalID
+	approveURL := withdrawalServerHostPort + "/action?is_api_call=true&domain=" + domain + "&type=" + strings.ToLower(action) + "&id=" + withdrawalID
 	resp, err := http.Get(approveURL)
+	if err != nil {
+		return err
+	}
+	body, err := ioutil.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		return err
+	}
+
+	if string(body) != "SUCCEED" {
+		activity.GetLogger(ctx).Info("paymentActivity auto action failed", zap.String("WithdrawalID", withdrawalID))
+		return errors.New(string(body))
+	}
+
+	// feedback
+	activity.GetLogger(ctx).Info("paymentActivity auto action succeeded", zap.String("WithdrawalID", withdrawalID))
+	return nil
+}
+
+func getStatus(ctx context.Context, withdrawalID string) (string, error) {
+	if len(withdrawalID) == 0 {
+		return "", errors.New("withdrawal id is empty")
+	}
+
+	resp, err := http.Get(withdrawalServerHostPort + "/status?id=" + withdrawalID)
 	if err != nil {
 		return "", err
 	}
@@ -127,14 +161,7 @@ func autoApprove(ctx context.Context, withdrawalID string) (string, error) {
 		return "", err
 	}
 
-	if string(body) != "SUCCEED" {
-		activity.GetLogger(ctx).Info("paymentActivity auto approval failed", zap.String("WithdrawalID", withdrawalID))
-		return "", errors.New(string(body))
-	}
-
-	// feedback
-	activity.GetLogger(ctx).Info("paymentActivity auto approval succeeded", zap.String("WithdrawalID", withdrawalID))
-	return "APPROVED", nil
+	return string(body), nil
 }
 
 func paymentActivity(ctx context.Context, withdrawalID string) error {
@@ -142,7 +169,7 @@ func paymentActivity(ctx context.Context, withdrawalID string) error {
 		return errors.New("withdrawal id is empty")
 	}
 
-	resp, err := http.Get(withdrawalServerHostPort + "/action?is_api_call=true&type=payment&id=" + withdrawalID)
+	resp, err := http.Get(withdrawalServerHostPort + "/action?is_api_call=true&type=payout&id=" + withdrawalID)
 	if err != nil {
 		return err
 	}

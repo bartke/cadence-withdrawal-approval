@@ -8,6 +8,7 @@ import (
 	"sort"
 
 	"github.com/bartke/cadence-withdrawal-approval/common"
+	"github.com/bartke/cadence-withdrawal-approval/withdrawal"
 	"go.uber.org/cadence/client"
 )
 
@@ -40,23 +41,24 @@ func main() {
 }
 
 func listHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprint(w, "<h1>Withdrawal Approval</h1>"+"<a href=\"/list\">HOME</a>"+
-		"<h3>All withdrawal requests:</h3><table><tr><th>ID</th><th>Status</th><th>Action</th>")
+	fmt.Fprint(w, "<h1>Withdrawal Approval</h1>"+"<a href=\"/list\">Refresh</a>"+
+		"<h3>All withdrawal requests:</h3><table><tr><th>ID</th><th>Sports</th><th>Casino</th><th>Manual</th><th>Payment</th><th>Action</th>")
 	keys := []string{}
-	for k := range withdrawalDB {
+	for k := range withdrawal.DB {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
 	for _, id := range keys {
-		withdrawal := withdrawalDB[id]
+		wd := withdrawal.DB[id]
 		actionLink := ""
-		if withdrawal.State() == Pending {
-			actionLink = fmt.Sprintf("<a href=\"/action?type=approve&id=%s\">"+
+		if wd.State() == withdrawal.Pending {
+			actionLink = fmt.Sprintf("<a href=\"/action?type=approve&domain=manual&id=%s\">"+
 				"<button style=\"background-color:#4CAF50;\">APPROVE</button></a>"+
-				"&nbsp;&nbsp;<a href=\"/action?type=reject&id=%s\">"+
+				"&nbsp;&nbsp;<a href=\"/action?type=reject&domain=manual&id=%s\">"+
 				"<button style=\"background-color:#f44336;\">REJECT</button></a>", id, id)
 		}
-		fmt.Fprintf(w, "<tr><td>%s</td><td>%s</td><td>%s</td></tr>", id, withdrawal.State(), actionLink)
+		fmt.Fprintf(w, "<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>",
+			id, wd.DomainState(withdrawal.Sports), wd.DomainState(withdrawal.Casino), wd.DomainState(withdrawal.Manual), wd.State(), actionLink)
 	}
 	fmt.Fprint(w, "</table>")
 }
@@ -64,20 +66,24 @@ func listHandler(w http.ResponseWriter, r *http.Request) {
 func actionHandler(w http.ResponseWriter, r *http.Request) {
 	isAPICall := r.URL.Query().Get("is_api_call") == "true"
 	id := r.URL.Query().Get("id")
-	withdrawal, ok := withdrawalDB[id]
+	wd, ok := withdrawal.DB[id]
 	if !ok {
 		fmt.Fprint(w, "ERROR:INVALID_ID")
 		return
 	}
-	oldState := withdrawal.State()
-	actionType := r.URL.Query().Get("type")
-	switch actionType {
-	case "approve":
-		withdrawalDB[id].Approve()
-	case "reject":
-		withdrawalDB[id].Reject()
-	case "payment":
-		withdrawalDB[id].Payout()
+	oldState := wd.State()
+	action := withdrawal.ParseAction(r.URL.Query().Get("type"))
+	domain := withdrawal.ParseDomain(r.URL.Query().Get("domain"))
+
+	log.Println("received ----> ", action, domain)
+
+	switch action {
+	case withdrawal.Approve:
+		withdrawal.DB[id].Approve(domain)
+	case withdrawal.Reject:
+		withdrawal.DB[id].Reject(domain)
+	case withdrawal.Payout:
+		withdrawal.DB[id].Payout()
 	}
 	if isAPICall {
 		fmt.Fprint(w, "SUCCEED")
@@ -85,12 +91,12 @@ func actionHandler(w http.ResponseWriter, r *http.Request) {
 		listHandler(w, r)
 	}
 
-	if oldState == Pending && (withdrawalDB[id].State() == Approved || withdrawalDB[id].State() == Rejected) {
+	if oldState == withdrawal.Pending && (withdrawal.DB[id].State() == withdrawal.Approved || withdrawal.DB[id].State() == withdrawal.Rejected) {
 		// report state change
-		notifyWithdrawalStateChange(id, withdrawalDB[id].State().String())
+		notifyWithdrawalStateChange(id, withdrawal.DB[id].State().String())
 	}
 
-	log.Printf("Set state for %s from %s to %s.\n", id, oldState, withdrawalDB[id].State().String())
+	log.Printf("Set state for %s from %s to %s via %v.\n", id, oldState, withdrawal.DB[id].State().String(), domain)
 
 	return
 }
@@ -98,13 +104,13 @@ func actionHandler(w http.ResponseWriter, r *http.Request) {
 func createHandler(w http.ResponseWriter, r *http.Request) {
 	isAPICall := r.URL.Query().Get("is_api_call") == "true"
 	id := r.URL.Query().Get("id")
-	_, ok := withdrawalDB[id]
+	_, ok := withdrawal.DB[id]
 	if ok {
 		fmt.Fprint(w, "ERROR:ID_ALREADY_EXISTS")
 		return
 	}
 
-	withdrawalDB[id] = NewWithdrawal(id)
+	withdrawal.DB[id] = withdrawal.New(id)
 	if isAPICall {
 		fmt.Fprint(w, "SUCCEED")
 	} else {
@@ -116,25 +122,25 @@ func createHandler(w http.ResponseWriter, r *http.Request) {
 
 func statusHandler(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Query().Get("id")
-	state, ok := withdrawalDB[id]
+	wd, ok := withdrawal.DB[id]
 	if !ok {
 		fmt.Fprint(w, "ERROR:INVALID_ID")
 		return
 	}
 
-	fmt.Fprint(w, state)
-	log.Printf("Checking status for %s: %s\n", id, state)
+	fmt.Fprint(w, wd.State().String())
+	log.Printf("Checking status for %s: %s\n", id, wd.State().String())
 	return
 }
 
 func callbackHandler(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Query().Get("id")
-	withdrawal, ok := withdrawalDB[id]
+	wd, ok := withdrawal.DB[id]
 	if !ok {
 		fmt.Fprint(w, "ERROR:INVALID_ID")
 		return
 	}
-	if withdrawal.State() != Pending {
+	if wd.State() != withdrawal.Pending {
 		fmt.Fprint(w, "ERROR:INVALID_STATE")
 		return
 	}

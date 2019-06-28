@@ -17,7 +17,8 @@ const (
 
 var (
 	withdrawalServerHostPort = "http://localhost:8099"
-	autoApprovalSystem1Host  = "http://localhost"
+	autoApprovalSystemSports = "http://localhost:8091"
+	autoApprovalSystemCasino = "http://localhost:8092"
 )
 
 // This needs to be done as part of a bootstrap step when the process starts.

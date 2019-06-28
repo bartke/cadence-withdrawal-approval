@@ -7,6 +7,8 @@ import (
 	"math/rand"
 	"net/http"
 	"time"
+
+	"github.com/bartke/cadence-withdrawal-approval/withdrawal"
 )
 
 var port string
@@ -30,9 +32,9 @@ func hex2rand(input string) int {
 
 func randomApproval(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Query().Get("id")
-	result := "APPROVED"
+	result := withdrawal.Approve
 	if id != "" && hex2rand(id) >= 80 {
-		result = "DISAPPROVED"
+		result = withdrawal.Reject
 	}
 	log.Println(id, result)
 	fmt.Fprint(w, result)
