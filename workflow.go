@@ -21,6 +21,7 @@ type Result struct {
 // SampleWithdrawalWorkflow workflow decider
 func SampleWithdrawalWorkflow(ctx workflow.Context, withdrawalID string) (result string, err error) {
 	waitChannel := workflow.NewChannel(ctx)
+	syncChannel := workflow.NewChannel(ctx)
 
 	// step 1, create new withdrawal report
 	ao := workflow.ActivityOptions{
@@ -75,7 +76,7 @@ func SampleWithdrawalWorkflow(ctx workflow.Context, withdrawalID string) (result
 		if err != nil {
 			logger.Error("Activity failed", zap.Error(err))
 		}
-		waitChannel.Send(ctx, Result{"sports", status})
+		syncChannel.Send(ctx, Result{"sports", status})
 	})
 
 	workflow.Go(ctx3, func(ctx workflow.Context) {
@@ -84,7 +85,7 @@ func SampleWithdrawalWorkflow(ctx workflow.Context, withdrawalID string) (result
 		if err != nil {
 			logger.Error("Activity failed", zap.Error(err))
 		}
-		waitChannel.Send(ctx, Result{"casino", status})
+		syncChannel.Send(ctx, Result{"casino", status})
 	})
 
 	// add the manual workflow
@@ -95,35 +96,42 @@ func SampleWithdrawalWorkflow(ctx workflow.Context, withdrawalID string) (result
 		if err != nil {
 			logger.Error("Activity failed", zap.Error(err))
 		}
-		waitChannel.Send(ctx, Result{"manual", status})
+		syncChannel.Send(ctx, Result{"manual", status})
 	})
 
 	// wait for the coroutinue to check in.
 
-	var status string
-	for {
-		err = workflow.ExecuteActivity(ctx3, getStatus, withdrawalID).Get(ctx3, &status)
-		if err != nil {
-			return "", nil
-		}
-
-		if status != "PENDING" {
-			break
-		}
-
-		var v interface{}
-		waitChannel.Receive(ctx3, &v)
-		switch r := v.(type) {
-		case error:
-			// ignore
-		case Result:
-			logger.Info("Result received "+r.Source, zap.String("WithdrawalStatus", status))
-			err = workflow.ExecuteActivity(ctx3, autoAction, withdrawalID, r.Source, r.Status).Get(ctx3, nil)
+	workflow.Go(ctx3, func(ctx workflow.Context) {
+		var status string
+		for {
+			err = workflow.ExecuteActivity(ctx, getStatus, withdrawalID).Get(ctx, &status)
 			if err != nil {
-				return "", nil
+				return
+			}
+
+			if status != "PENDING" {
+				logger.Info("Status changed "+status, zap.String("WithdrawalStatus", status))
+				waitChannel.Send(ctx, status)
+				break
+			}
+
+			var v interface{}
+			syncChannel.Receive(ctx, &v)
+			switch r := v.(type) {
+			case error:
+				// ignore
+			case Result:
+				logger.Info("Result received "+r.Source, zap.String("WithdrawalStatus", status))
+				err = workflow.ExecuteActivity(ctx, autoAction, withdrawalID, r.Source, r.Status).Get(ctx, nil)
+				if err != nil {
+					return
+				}
 			}
 		}
-	}
+	})
+
+	var status string
+	waitChannel.Receive(ctx3, &status)
 
 	if status != "APPROVED" {
 		logger.Info("Workflow completed.", zap.String("WithdrawalStatus", status))
