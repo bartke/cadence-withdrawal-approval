@@ -1,10 +1,12 @@
 ## Cadence Withdrawal Approval POC
 
-This sample workflow process a withdrawal request workflow with an
-asynchronous activity. Simple evaluation based on
+Sample workflow process to evaluate cadence for a withdrawal approval system
+based on
 [https://github.com/samarabbas/cadence-samples](https://github.com/samarabbas/cadence-samples).
 
-### Sample Description
+![concept](https://github.com/bartke/cadence-withdrawal-approval/blob/master/screenshots/concept.png "Withdrawal Concept")
+
+### Description
 
 - Create a new withdrawal request to start the workflow
 - try to contact two separate sample auto approval systems
