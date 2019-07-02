@@ -6,7 +6,6 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
-	"time"
 
 	"github.com/bartke/cadence-withdrawal-approval/withdrawal"
 )
@@ -16,8 +15,6 @@ var port string
 func main() {
 	flag.StringVar(&port, "p", "port", "port to listen on")
 	flag.Parse()
-
-	rand.Seed(time.Now().UTC().UnixNano())
 
 	http.HandleFunc("/", randomApproval)
 	log.Printf("Starting server on :%v ...\n", port)
